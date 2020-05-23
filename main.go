@@ -60,15 +60,12 @@ func mixColor(otherColors []*color.RGBA) *color.RGBA {
 		}
 	}
 
-	if count > 0 {
+	var minVal = uint8(40)
+	// var maxVal = uint8(255)
+	if mixedColor.B > minVal && mixedColor.R > 0 && mixedColor.B > 0 && count > 0 {
 		mixedColor.B /= count
 		mixedColor.G /= count
 		mixedColor.R /= count
-	}
-
-	var minVal = uint8(40)
-	if mixedColor.R < minVal && mixedColor.G < minVal && mixedColor.B < minVal {
-		mixedColor.R, mixedColor.G, mixedColor.B, mixedColor.A = minVal, minVal, minVal, 255
 	}
 
 	return mixedColor
@@ -79,7 +76,7 @@ func isOnField(field [][]*color.RGBA, x, y int) bool {
 }
 
 func update(field [][]*color.RGBA, newField [][]*color.RGBA) {
-	var nearbyCells [9]*color.RGBA
+	var nearbyCells [len(moveX)]*color.RGBA
 	var shadedNearbyCells = nearbyCells[:0]
 
 	for x, col := range field {
@@ -110,16 +107,16 @@ func addCells(newField [][]*color.RGBA, field [][]*color.RGBA) {
 	for x, column := range field {
 		for y, color := range column {
 			if color == nil && newField[x][y] != nil {
-				addRandColorCell(pixel.V(
+				addDefaultCell(pixel.V(
 					float64(x)*defaultCell.width,
 					float64(y)*defaultCell.height,
 				))
 			} else if color != nil && newField[x][y] != nil {
-				addColorCell(pixel.V(
+				addDefaultCell(pixel.V(
 					float64(x)*defaultCell.width,
 					float64(y)*defaultCell.height,
 				),
-					field[x][y],
+				//field[x][y],
 				)
 			}
 		}

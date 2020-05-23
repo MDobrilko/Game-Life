@@ -5,6 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/faiface/pixel/pixelgl"
+	"golang.org/x/image/colornames"
 	_ "golang.org/x/image/colornames"
 
 	"github.com/faiface/pixel"
@@ -21,6 +22,16 @@ var defaultCell = cell{10, 10, pixel.RGB(0, 255, 0)}
 var imd = imdraw.New(nil)
 
 func addCell(vertex pixel.Vec, width, height float64, color color.Color) {
+	imd.Color = colornames.White
+	imd.Push(vertex)
+	imd.Color = colornames.White
+	imd.Push(pixel.V(vertex.X, vertex.Y+height))
+	imd.Color = colornames.White
+	imd.Push(pixel.V(vertex.X+width, vertex.Y+height))
+	imd.Color = colornames.White
+	imd.Push(pixel.V(vertex.X+width, vertex.Y))
+	imd.Polygon(1)
+
 	imd.Color = color
 	imd.Push(vertex)
 	imd.Color = color
