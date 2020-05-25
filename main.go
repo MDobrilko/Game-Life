@@ -4,6 +4,7 @@ package main
 
 import (
 	"math/rand"
+	"time"
 
 	"golang.org/x/image/colornames"
 
@@ -20,7 +21,7 @@ var moveX = [8]int{1, 0, -1, 0, 1, -1, 1, -1}
 var moveY = [8]int{0, 1, 0, -1, 1, -1, -1, 1}
 
 func init() {
-	rand.Seed(1000)
+	rand.Seed(time.Now().UnixNano())
 }
 
 func generateFieldOfCells() [][]bool {
