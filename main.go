@@ -81,6 +81,37 @@ func isGameOver(prevFields [][][]bool, field [][]bool) bool {
 	return false
 }
 
+func parUpdate(field [][]bool, newField [][]bool) {
+	goroutinesNum := 200000
+	ch := make(chan bool, goroutinesNum)
+
+	for i := 0; i < goroutinesNum; i++ {
+		ch <- true
+	}
+
+	for x, col := range field {
+		<-ch
+		go func(field [][]bool, col []bool, x int) {
+			for y, isAlive := range col {
+				livingCellsNum := 0
+
+				for i := 0; i < len(moveX); i++ {
+					if isOnField(field, x+moveX[i], y+moveY[i]) && field[x+moveX[i]][y+moveY[i]] == true {
+						livingCellsNum++
+					}
+				}
+
+				if livingCellsNum == 3 || livingCellsNum == 2 && isAlive {
+					newField[x][y] = true
+				} else {
+					newField[x][y] = false
+				}
+			}
+		}(field, col, x)
+		ch <- true
+	}
+}
+
 func seqUpdate(field [][]bool, newField [][]bool) {
 	for x, col := range field {
 		for y, isAlive := range col {
