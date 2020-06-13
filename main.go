@@ -62,7 +62,7 @@ func isOnField(field [][]bool, x, y int) bool {
 	return x >= 0 && y >= 0 && x < len(field) && y < len(field[x])
 }
 
-func isGameOver(prevFields [][][]bool, field [][]bool) bool {
+func seqIsGameOver(prevFields [][][]bool, field [][]bool) bool {
 	for i := range prevFields {
 		areFieldsDifferent := false
 	CheckFields:
@@ -174,13 +174,13 @@ func showBuilder(win *pixelgl.Window, field [][]bool) {
 	}
 }
 
-func startGame(win *pixelgl.Window) {
+func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 	var (
 		prevStepsNum = 8
 		prevFields   = make([][][]bool, prevStepsNum)
 		field        = generateFieldOfDeadCells()
 
-		timer  = time.Now()
+		timer  = time.Tick(time.Second)
 		frames = 0
 
 		isFieldGenerated = true
@@ -194,13 +194,17 @@ func startGame(win *pixelgl.Window) {
 	addCellsToWin(field)
 	drawCells(win)
 
+	startTime := time.Now()
 	for !win.Closed() {
 		win.Clear(colornames.Black)
 		clearCells()
 
-		if win.JustPressed(pixelgl.KeyB) || isLifeGoing && isGameOver(prevFields, field) {
+		if win.JustPressed(pixelgl.KeyB) || isLifeGoing && seqIsGameOver(prevFields, field) {
 			isFieldGenerated = !isFieldGenerated
 			isLifeGoing = !isLifeGoing
+
+			fmt.Println("Time of game: ", time.Now().Sub(startTime).Milliseconds(), "ms")
+			startTime = time.Now()
 		}
 
 		if isLifeGoing {
@@ -209,12 +213,8 @@ func startGame(win *pixelgl.Window) {
 		} else if isFieldGenerated {
 			if win.JustPressed(pixelgl.KeyR) {
 				field = generateFieldOfCells()
-
-				isFieldGenerated = !isFieldGenerated
-				isLifeGoing = !isLifeGoing
-			} else {
-				showBuilder(win, field)
 			}
+			showBuilder(win, field)
 		}
 		addCellsToWin(field)
 
@@ -222,10 +222,11 @@ func startGame(win *pixelgl.Window) {
 		win.Update()
 
 		frames++
-		if time.Now().Sub(timer).Milliseconds() >= 1000 {
-			fmt.Println("frames per second = ", frames)
+		select {
+		case <-timer:
+			win.SetTitle(fmt.Sprintf("%s | FPS: %d", cfg.Title, frames))
 			frames = 0
-			timer = time.Now()
+		default:
 		}
 	}
 }
@@ -241,9 +242,7 @@ func run() {
 		panic(err)
 	}
 
-	startTime := time.Now()
-	startGame(win)
-	fmt.Println("Time of game: ", time.Now().Sub(startTime).Milliseconds(), "ms")
+	startGame(&cfg, win)
 }
 
 func main() {
