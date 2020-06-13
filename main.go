@@ -140,6 +140,11 @@ func addCellsToWin(field [][]bool) {
 					float64(x)*defaultCell.width,
 					float64(y)*defaultCell.height,
 				))
+			} else {
+				addDefaultEmptyCell(pixel.V(
+					float64(x)*defaultCell.width,
+					float64(y)*defaultCell.height,
+				))
 			}
 		}
 	}
@@ -158,25 +163,59 @@ func addFieldToPrevField(prevFields [][][]bool, field [][]bool) {
 	copyField(prevFields[0], field)
 }
 
+func showBuilder(win *pixelgl.Window, field [][]bool) {
+	newCellX := int(win.MousePosition().X / defaultCell.height)
+	newCellY := int(win.MousePosition().Y / defaultCell.width)
+
+	if win.JustPressed(pixelgl.MouseButtonLeft) {
+		field[newCellX][newCellY] = true
+	} else if win.JustPressed(pixelgl.MouseButtonRight) {
+		field[newCellX][newCellY] = false
+	}
+}
+
 func startGame(win *pixelgl.Window) {
-	prevStepsNum := 8
-	var prevFields = make([][][]bool, prevStepsNum)
+	var (
+		prevStepsNum = 8
+		prevFields   = make([][][]bool, prevStepsNum)
+		field        = generateFieldOfDeadCells()
+
+		timer  = time.Now()
+		frames = 0
+
+		isFieldGenerated = true
+		isLifeGoing      = false
+	)
+
 	for i := 0; i < prevStepsNum; i++ {
 		prevFields[i] = generateFieldOfDeadCells()
 	}
 
-	field := generateFieldOfCells()
 	addCellsToWin(field)
 	drawCells(win)
 
-	timer := time.Now()
-	frames := 0
-	for !isGameOver(prevFields, field) && !win.Closed() {
+	for !win.Closed() {
 		win.Clear(colornames.Black)
 		clearCells()
 
-		addFieldToPrevField(prevFields, field)
-		seqUpdate(prevFields[0], field)
+		if win.JustPressed(pixelgl.KeyB) || isLifeGoing && isGameOver(prevFields, field) {
+			isFieldGenerated = !isFieldGenerated
+			isLifeGoing = !isLifeGoing
+		}
+
+		if isLifeGoing {
+			addFieldToPrevField(prevFields, field)
+			seqUpdate(prevFields[0], field)
+		} else if isFieldGenerated {
+			if win.JustPressed(pixelgl.KeyR) {
+				field = generateFieldOfCells()
+
+				isFieldGenerated = !isFieldGenerated
+				isLifeGoing = !isLifeGoing
+			} else {
+				showBuilder(win, field)
+			}
+		}
 		addCellsToWin(field)
 
 		drawCells(win)
@@ -188,9 +227,6 @@ func startGame(win *pixelgl.Window) {
 			frames = 0
 			timer = time.Now()
 		}
-	}
-	for !win.Closed() {
-		win.Update()
 	}
 }
 
