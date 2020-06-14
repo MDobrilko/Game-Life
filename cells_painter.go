@@ -16,7 +16,7 @@ type cell struct {
 	color         color.Color
 }
 
-var defaultCell = cell{10, 10, pixel.RGB(0, 1, 0)}
+var defaultCell = cell{20, 20, pixel.RGB(0, 1, 0)}
 
 var imd = imdraw.New(nil)
 

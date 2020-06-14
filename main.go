@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
@@ -44,6 +46,67 @@ func min(val1, val2 int) int {
 	}
 }
 
+func readField(filename string) [][]bool {
+	field := generateFieldOfDeadCells()
+
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println("File hasnt been opened")
+		return field
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanLines)
+
+	for i := 0; scanner.Scan(); i++ {
+		for j, isAlive := range scanner.Text() {
+			if isAlive == '1' {
+				field[i][j] = true
+			}
+		}
+	}
+
+	return field
+}
+
+func writeField(filename string, field [][]bool) {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		fmt.Println("File hasnt been opened")
+		return
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	for _, col := range field {
+		for _, isAlive := range col {
+			if isAlive {
+				writer.WriteString("1")
+			} else {
+				writer.WriteString("0")
+			}
+		}
+		writer.WriteString("\n")
+	}
+}
+
+func readFilenameFromConsole() string {
+	var filename string
+	fmt.Scan(&filename)
+	return filename + ".txt"
+}
+
+func clearField(field [][]bool) {
+	for x, col := range field {
+		for y := range col {
+			field[x][y] = false
+		}
+	}
+}
+
 func generateFieldOfDeadCells() [][]bool {
 	NCellsX := int64(ScreenWidth / defaultCell.width)
 	NCellsY := int64(ScreenHeight / defaultCell.height)
@@ -54,6 +117,18 @@ func generateFieldOfDeadCells() [][]bool {
 	}
 
 	return field
+}
+
+func printHelpToConsole() {
+	fmt.Println(
+		`p - pause and continue game
+s - save current field to file "field.txt"
+f - read field from file "field.txt"
+o - read field from custom file.txt
+c - clear field
+h - showing current helps
+`,
+	)
 }
 
 func generateFieldOfCells() [][]bool {
@@ -237,7 +312,10 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 
 		isFieldGenerated = true
 		isLifeGoing      = false
+
+		filename = "field.txt"
 	)
+	fmt.Printf("Field size: %d %d\n\n", len(field), len(field[0]))
 
 	for i := 0; i < prevStepsNum; i++ {
 		prevFields[i] = generateFieldOfDeadCells()
@@ -251,7 +329,7 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 		win.Clear(colornames.Black)
 		clearCells()
 
-		if win.JustPressed(pixelgl.KeyB) || isLifeGoing && isGameOver(prevFields, field) {
+		if win.JustPressed(pixelgl.KeyP) || isLifeGoing && isGameOver(prevFields, field) {
 			isFieldGenerated = !isFieldGenerated
 			isLifeGoing = !isLifeGoing
 
@@ -261,10 +339,21 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 
 		if isLifeGoing {
 			addFieldToPrevField(prevFields, field)
-			parUpdate(prevFields[0], field)
+			parBlockUpdate(prevFields[0], field)
 		} else if isFieldGenerated {
 			if win.JustPressed(pixelgl.KeyR) {
 				field = generateFieldOfCells()
+			} else if win.JustPressed(pixelgl.KeyS) {
+				writeField(filename, field)
+			} else if win.JustPressed(pixelgl.KeyF) {
+				field = readField(filename)
+			} else if win.JustPressed(pixelgl.KeyC) {
+				clearField(field)
+			} else if win.JustPressed(pixelgl.KeyO) {
+				fmt.Print("Insert filename with field: ")
+				field = readField(readFilenameFromConsole())
+			} else if win.JustPressed(pixelgl.KeyH) {
+				printHelpToConsole()
 			}
 			showBuilder(win, field)
 		}
@@ -283,6 +372,29 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 	}
 }
 
+func startGameWithoutWin() {
+	var (
+		prevStepsNum = 9
+		prevFields   = make([][][]bool, prevStepsNum)
+
+		filename = "field.txt"
+
+		field = readField(filename)
+	)
+	fmt.Printf("Field size: %d %d\n\n", len(field), len(field[0]))
+
+	for i := 0; i < prevStepsNum; i++ {
+		prevFields[i] = generateFieldOfDeadCells()
+	}
+
+	startTime := time.Now()
+	for !isGameOver(prevFields, field) {
+		addFieldToPrevField(prevFields, field)
+		parUpdate(prevFields[0], field)
+	}
+	fmt.Println("Time of game: ", time.Now().Sub(startTime).Milliseconds(), "ms")
+}
+
 func run() {
 	cfg := pixelgl.WindowConfig{
 		Title:  "Game life",
@@ -295,6 +407,7 @@ func run() {
 	}
 
 	startGame(&cfg, win)
+	// startGameWithoutWin()
 }
 
 func main() {
