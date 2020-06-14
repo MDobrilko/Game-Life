@@ -1,10 +1,10 @@
 package main
 
-// go build -ldflags -H=windowsgui
-
 import (
 	"fmt"
+	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"golang.org/x/image/colornames"
@@ -18,11 +18,30 @@ const (
 	ScreenHeight = 800.0
 )
 
+var (
+	goroutinesNum = 100
+	ch            = make(chan bool, goroutinesNum)
+
+	waitGroup sync.WaitGroup
+)
+
 var moveX = [8]int{1, 0, -1, 0, 1, -1, 1, -1}
 var moveY = [8]int{0, 1, 0, -1, 1, -1, -1, 1}
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+
+	for i := 0; i < goroutinesNum; i++ {
+		ch <- true
+	}
+}
+
+func min(val1, val2 int) int {
+	if val1 < val2 {
+		return val1
+	} else {
+		return val2
+	}
 }
 
 func generateFieldOfDeadCells() [][]bool {
@@ -62,7 +81,7 @@ func isOnField(field [][]bool, x, y int) bool {
 	return x >= 0 && y >= 0 && x < len(field) && y < len(field[x])
 }
 
-func seqIsGameOver(prevFields [][][]bool, field [][]bool) bool {
+func isGameOver(prevFields [][][]bool, field [][]bool) bool {
 	for i := range prevFields {
 		areFieldsDifferent := false
 	CheckFields:
@@ -81,21 +100,70 @@ func seqIsGameOver(prevFields [][][]bool, field [][]bool) bool {
 	return false
 }
 
-func parUpdate(field [][]bool, newField [][]bool) {
-	goroutinesNum := 200000
-	ch := make(chan bool, goroutinesNum)
+func calcNextFieldState(field, newField [][]bool, fromX, fromY, toX, toY int) {
+	for x := fromX; x < toX; x++ {
+		for y := fromY; y < toY; y++ {
+			livingCellsNum := 0
 
-	for i := 0; i < goroutinesNum; i++ {
-		ch <- true
+			for i := range moveX {
+				if isOnField(field, x+moveX[i], y+moveY[i]) && field[x+moveX[i]][y+moveY[i]] == true {
+					livingCellsNum++
+				}
+			}
+
+			if livingCellsNum == 3 || livingCellsNum == 2 && field[x][y] {
+				newField[x][y] = true
+			} else {
+				newField[x][y] = false
+			}
+		}
+	}
+}
+
+func parBlockUpdate(field, newField [][]bool) {
+	type Block struct {
+		lenY, lenX int
 	}
 
+	var (
+		fieldLenX   = len(field)
+		fieldLenY   = len(field[0])
+		blockSquare = (fieldLenX*fieldLenY + goroutinesNum - 1) / goroutinesNum
+
+		blockSize = Block{}
+	)
+
+	blockSize.lenX = int(math.Ceil(math.Sqrt(float64(blockSquare) * float64(fieldLenX) / float64(fieldLenY))))
+	blockSize.lenY = int(math.Ceil((float64(fieldLenY) / float64(fieldLenX)) * float64(blockSize.lenX)))
+
+	rowBlocksN := (fieldLenX + blockSize.lenX - 1) / blockSize.lenX
+
+	waitGroup.Add(goroutinesNum)
+	for idx := 0; idx < goroutinesNum; idx++ {
+		go func(field, newField [][]bool, blockSize Block, idx int) {
+			fromX := (idx / rowBlocksN) * blockSize.lenX
+			toX := min(fromX+blockSize.lenX, fieldLenX)
+			fromY := (idx % rowBlocksN) * blockSize.lenY
+			toY := min(fromY+blockSize.lenY, fieldLenY)
+
+			if fromX < len(field) && fromY < len(field[0]) {
+				calcNextFieldState(field, newField, fromX, fromY, toX, toY)
+			}
+
+			waitGroup.Done()
+		}(field, newField, blockSize, idx)
+	}
+	waitGroup.Wait()
+}
+
+func parUpdate(field, newField [][]bool) {
 	for x, col := range field {
 		<-ch
 		go func(field [][]bool, col []bool, x int) {
 			for y, isAlive := range col {
 				livingCellsNum := 0
 
-				for i := 0; i < len(moveX); i++ {
+				for i := range moveX {
 					if isOnField(field, x+moveX[i], y+moveY[i]) && field[x+moveX[i]][y+moveY[i]] == true {
 						livingCellsNum++
 					}
@@ -113,23 +181,7 @@ func parUpdate(field [][]bool, newField [][]bool) {
 }
 
 func seqUpdate(field [][]bool, newField [][]bool) {
-	for x, col := range field {
-		for y, isAlive := range col {
-			livingCellsNum := 0
-
-			for i := 0; i < len(moveX); i++ {
-				if isOnField(field, x+moveX[i], y+moveY[i]) && field[x+moveX[i]][y+moveY[i]] == true {
-					livingCellsNum++
-				}
-			}
-
-			if livingCellsNum == 3 || livingCellsNum == 2 && isAlive {
-				newField[x][y] = true
-			} else {
-				newField[x][y] = false
-			}
-		}
-	}
+	calcNextFieldState(field, newField, 0, 0, len(field), len(field[0]))
 }
 
 func addCellsToWin(field [][]bool) {
@@ -176,7 +228,7 @@ func showBuilder(win *pixelgl.Window, field [][]bool) {
 
 func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 	var (
-		prevStepsNum = 8
+		prevStepsNum = 9
 		prevFields   = make([][][]bool, prevStepsNum)
 		field        = generateFieldOfDeadCells()
 
@@ -199,7 +251,7 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 		win.Clear(colornames.Black)
 		clearCells()
 
-		if win.JustPressed(pixelgl.KeyB) || isLifeGoing && seqIsGameOver(prevFields, field) {
+		if win.JustPressed(pixelgl.KeyB) || isLifeGoing && isGameOver(prevFields, field) {
 			isFieldGenerated = !isFieldGenerated
 			isLifeGoing = !isLifeGoing
 
@@ -209,7 +261,7 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 
 		if isLifeGoing {
 			addFieldToPrevField(prevFields, field)
-			seqUpdate(prevFields[0], field)
+			parUpdate(prevFields[0], field)
 		} else if isFieldGenerated {
 			if win.JustPressed(pixelgl.KeyR) {
 				field = generateFieldOfCells()
