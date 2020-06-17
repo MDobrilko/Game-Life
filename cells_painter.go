@@ -2,7 +2,6 @@ package main
 
 import (
 	"image/color"
-	"math/rand"
 
 	"github.com/faiface/pixel/pixelgl"
 	_ "golang.org/x/image/colornames"
@@ -16,7 +15,7 @@ type cell struct {
 	color         color.Color
 }
 
-var defaultCell = cell{20, 20, pixel.RGB(0, 1, 0)}
+var defaultCell = cell{1, 1, pixel.RGB(0, 1, 0)}
 
 var imd = imdraw.New(nil)
 
@@ -46,15 +45,6 @@ func addDefaultEmptyCell(vertex pixel.Vec) {
 
 func addDefaultCell(vertex pixel.Vec) {
 	addCell(vertex, defaultCell.width, defaultCell.height, defaultCell.color)
-}
-
-func addRandColorCell(vertex pixel.Vec) {
-	addCell(
-		vertex,
-		defaultCell.width,
-		defaultCell.height,
-		colors[rand.Intn(len(colors))],
-	)
 }
 
 func addColorCell(vertex pixel.Vec, color color.Color) {
