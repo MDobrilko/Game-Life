@@ -325,8 +325,8 @@ func addFieldToPrevField(prevFields [][][]bool, field [][]bool) {
 	for i := len(prevFields) - 1; i > 0; i-- {
 		prevFields[i-1], prevFields[i] = prevFields[i], prevFields[i-1]
 	}
-	copyField(prevFields[0], field)
-	// parCopyField(prevFields[0], field)
+	// copyField(prevFields[0], field)
+	parCopyField(prevFields[0], field)
 }
 
 func startGameWithoutWin() {
@@ -348,14 +348,14 @@ func startGameWithoutWin() {
 	}
 
 	startTime := time.Now()
-	for !isGameOver(prevFields, field) {
+	for !parIsGameOver(prevFields, field) {
 		addFieldToPrevField(prevFields, field)
 		// seqUpdate(prevFields[0], field)
 		// parUpdate(prevFields[0], field)
 		parStripUpdate(prevFields[0], field)
 	}
 	fmt.Println("Time of game: ", time.Now().Sub(startTime).Milliseconds(), "ms")
-	checkField(outputFilename, field)
+	// checkField(outputFilename, field)
 }
 
 func run() {

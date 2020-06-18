@@ -1,6 +1,8 @@
 package main
 
-import "sync"
+import (
+	"sync"
+)
 
 func parCalcNextFieldState(field, newField [][]bool, fromX, fromY, toX, toY int, ch chan bool, waitGroup *sync.WaitGroup) {
 	for x := fromX; x < toX; x++ {
@@ -39,6 +41,9 @@ func parCopyField(dst, src [][]bool) {
 
 func parStripUpdate(field, newField [][]bool) {
 	stripSize := len(field) / goroutinesNum
+	if stripSize < 1 {
+		stripSize = 1
+	}
 
 	for i := 0; i < len(field); i += stripSize {
 		ch <- true
@@ -86,31 +91,26 @@ func parIsGameOver(prevFields [][][]bool, field [][]bool) bool {
 			ch <- true
 			waitGroup.Add(1)
 
-			go func(field [][]bool, col []bool, x int, areFieldsDifferent *bool, ch chan bool, waitGroup *sync.WaitGroup, m *sync.Mutex) {
-				local := false
+			go func(field [][]bool, col []bool, x int, areFieldsDifferent *bool, ch chan bool, waitGroup *sync.WaitGroup) {
 				for y, isAlive := range col {
 					if isAlive != field[x][y] {
-						local = true
+						*areFieldsDifferent = true
 						break
 					}
 				}
-				m.Lock()
-				*areFieldsDifferent = local
-				m.Unlock()
 				<-ch
 				waitGroup.Done()
-			}(field, col, x, &areFieldsDifferent, ch, &waitGroup, m)
-
+			}(field, col, x, &areFieldsDifferent, ch, &waitGroup)
 			if areFieldsDifferent {
 				break
 			}
 		}
+		waitGroup.Wait()
 		if areFieldsDifferent == false {
 			isOver = true
 			break
 		}
 	}
 
-	waitGroup.Wait()
 	return isOver
 }
