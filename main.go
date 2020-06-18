@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"sync"
@@ -19,15 +18,14 @@ const (
 	// ScreenWidth  = 1560.0
 	// ScreenHeight = 800.0
 
-	ScreenWidth  = 1000.0
-	ScreenHeight = 1000.0
+	ScreenWidth  = 500.0
+	ScreenHeight = 500.0
 )
 
 var (
-	goroutinesNum = 2
-	ch            chan bool
-
-	waitGroup sync.WaitGroup
+	goroutinesNum = 1000
+	ch            = make(chan bool, goroutinesNum)
+	waitGroup     sync.WaitGroup
 )
 
 var moveX = [8]int{1, 0, -1, 0, 1, -1, 1, -1}
@@ -35,7 +33,6 @@ var moveY = [8]int{0, 1, 0, -1, 1, -1, -1, 1}
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	ch = make(chan bool, goroutinesNum)
 }
 
 func min(val1, val2 int) int {
@@ -183,39 +180,6 @@ func isGameOver(prevFields [][][]bool, field [][]bool) bool {
 	return false
 }
 
-func parIsGameOver(prevFields [][][]bool, field [][]bool) bool {
-	isOver := false
-	for i := range prevFields {
-		areFieldsDifferent := false
-
-		for x, col := range prevFields[i] {
-			ch <- true
-			waitGroup.Add(1)
-			go func(field [][]bool, col []bool, x int, areFieldsDifferent *bool, ch chan bool) {
-				for y, isAlive := range col {
-					if isAlive != field[x][y] {
-						*areFieldsDifferent = true
-						break
-					}
-				}
-				<-ch
-				waitGroup.Done()
-			}(field, col, x, &areFieldsDifferent, ch)
-
-			if areFieldsDifferent {
-				break
-			}
-		}
-		if areFieldsDifferent == false {
-			isOver = true
-			break
-		}
-	}
-
-	waitGroup.Done()
-	return isOver
-}
-
 func calcNextFieldState(field, newField [][]bool, fromX, fromY, toX, toY int) {
 	for x := fromX; x < toX; x++ {
 		for y := fromY; y < toY; y++ {
@@ -233,72 +197,6 @@ func calcNextFieldState(field, newField [][]bool, fromX, fromY, toX, toY int) {
 				newField[x][y] = false
 			}
 		}
-	}
-}
-
-func parBlockUpdate(field, newField [][]bool) {
-	type Block struct {
-		lenY, lenX int
-	}
-
-	var (
-		fieldLenX   = len(field)
-		fieldLenY   = len(field[0])
-		blockSquare = (fieldLenX*fieldLenY + goroutinesNum - 1) / goroutinesNum
-
-		blockSize = Block{}
-	)
-
-	blockSize.lenX = int(math.Ceil(math.Sqrt(float64(blockSquare*fieldLenX) / float64(fieldLenY))))
-	blockSize.lenY = int(math.Ceil((float64(fieldLenY) / float64(fieldLenX)) * float64(blockSize.lenX)))
-
-	rowBlocksN := (fieldLenX + blockSize.lenX - 1) / blockSize.lenX
-
-	waitGroup.Add(goroutinesNum)
-	for idx := 0; idx < goroutinesNum; idx++ {
-		go func(field, newField [][]bool, blockSize Block, idx int) {
-			fromX := (idx / rowBlocksN) * blockSize.lenX
-			toX := min(fromX+blockSize.lenX, fieldLenX)
-			fromY := (idx % rowBlocksN) * blockSize.lenY
-			toY := min(fromY+blockSize.lenY, fieldLenY)
-
-			if fromX < len(field) && fromY < len(field[0]) {
-				calcNextFieldState(field, newField, fromX, fromY, toX, toY)
-			}
-
-			waitGroup.Done()
-		}(field, newField, blockSize, idx)
-	}
-	waitGroup.Wait()
-}
-
-func parUpdate(field, newField [][]bool) {
-	for i := 0; i < goroutinesNum; i++ {
-		ch <- true
-	}
-	for x, col := range field {
-		<-ch
-		go func(field [][]bool, col []bool, x int, ch chan bool) {
-			for y, isAlive := range col {
-				livingCellsNum := 0
-
-				for i := range moveX {
-					if isOnField(field, x+moveX[i], y+moveY[i]) && field[x+moveX[i]][y+moveY[i]] == true {
-						livingCellsNum++
-					}
-				}
-
-				if livingCellsNum == 3 || livingCellsNum == 2 && isAlive {
-					newField[x][y] = true
-				} else {
-					newField[x][y] = false
-				}
-			}
-			ch <- true
-		}(field, col, x, ch)
-	}
-	for i := 0; i < goroutinesNum; i++ {
-		<-ch
 	}
 }
 
@@ -324,17 +222,10 @@ func addCellsToWin(field [][]bool) {
 	}
 }
 
-func copyField(dst [][]bool, src [][]bool) {
+func copyField(dst, src [][]bool) {
 	for i := range dst {
 		copy(dst[i], src[i])
 	}
-}
-
-func addFieldToPrevField(prevFields [][][]bool, field [][]bool) {
-	for i := len(prevFields) - 1; i > 0; i-- {
-		prevFields[i-1], prevFields[i] = prevFields[i], prevFields[i-1]
-	}
-	copyField(prevFields[0], field)
 }
 
 func showBuilder(win *pixelgl.Window, field [][]bool) {
@@ -386,7 +277,7 @@ func startGame(cfg *pixelgl.WindowConfig, win *pixelgl.Window) {
 
 		if isLifeGoing {
 			addFieldToPrevField(prevFields, field)
-			parBlockUpdate(prevFields[0], field)
+			parStripUpdate(prevFields[0], field)
 		} else if isFieldGenerated {
 			if win.JustPressed(pixelgl.KeyR) {
 				field = generateFieldOfCells()
@@ -430,6 +321,14 @@ func checkField(filename string, field [][]bool) {
 	}
 }
 
+func addFieldToPrevField(prevFields [][][]bool, field [][]bool) {
+	for i := len(prevFields) - 1; i > 0; i-- {
+		prevFields[i-1], prevFields[i] = prevFields[i], prevFields[i-1]
+	}
+	copyField(prevFields[0], field)
+	// parCopyField(prevFields[0], field)
+}
+
 func startGameWithoutWin() {
 	var (
 		prevStepsNum = 9
@@ -449,11 +348,11 @@ func startGameWithoutWin() {
 	}
 
 	startTime := time.Now()
-	for !parIsGameOver(prevFields, field) {
+	for !isGameOver(prevFields, field) {
 		addFieldToPrevField(prevFields, field)
 		// seqUpdate(prevFields[0], field)
-		parUpdate(prevFields[0], field)
-		// parBlockUpdate(prevFields[0], field)
+		// parUpdate(prevFields[0], field)
+		parStripUpdate(prevFields[0], field)
 	}
 	fmt.Println("Time of game: ", time.Now().Sub(startTime).Milliseconds(), "ms")
 	checkField(outputFilename, field)
